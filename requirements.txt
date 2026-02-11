@@ -1,0 +1,8 @@
+pandas
+sqlalchemy
+pyodbc
+duckdb
+streamlit
+sentence-transformers
+chromadb
+python-dotenv
