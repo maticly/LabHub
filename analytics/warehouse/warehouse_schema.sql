@@ -5,6 +5,12 @@
 -- Create schema
 CREATE SCHEMA IF NOT EXISTS dw;
 
+-- Sequences for auto-incrementing keys
+CREATE SEQUENCE IF NOT EXISTS dw.seq_product_key;
+CREATE SEQUENCE IF NOT EXISTS dw.seq_location_key;
+CREATE SEQUENCE IF NOT EXISTS dw.seq_user_key;
+CREATE SEQUENCE IF NOT EXISTS dw.seq_fact_inventory_key;
+
 -- =========================
 -- Dimension: Dim_Date
 -- =========================
@@ -23,7 +29,7 @@ CREATE TABLE IF NOT EXISTS dw.Dim_Date (
 -- Dimension: Dim_Product
 -- =========================
 CREATE TABLE IF NOT EXISTS dw.Dim_Product (
-    ProductKey INTEGER PRIMARY KEY, -- DuckDB handles auto-increment automatically
+    ProductKey INTEGER PRIMARY KEY DEFAULT nextval('dw.seq_product_key'),
     ProductID INT NOT NULL,
     ProductName VARCHAR(128) NOT NULL,
     CategoryName VARCHAR(64) NOT NULL,
@@ -34,7 +40,7 @@ CREATE TABLE IF NOT EXISTS dw.Dim_Product (
 -- Dimension: Dim_Location
 -- =========================
 CREATE TABLE IF NOT EXISTS dw.Dim_Location (
-    LocationKey INTEGER PRIMARY KEY, -- DuckDB handles auto-increment automatically
+    LocationKey INTEGER PRIMARY KEY DEFAULT nextval('dw.seq_location_key'),
     LocationID INT NOT NULL,
     SiteName VARCHAR(256),
     Building VARCHAR(256),
@@ -46,7 +52,7 @@ CREATE TABLE IF NOT EXISTS dw.Dim_Location (
 -- Dimension: Dim_User
 -- =========================
 CREATE TABLE IF NOT EXISTS dw.Dim_User (
-    UserKey INTEGER PRIMARY KEY, -- DuckDB handles auto-increment automatically
+    UserKey INTEGER PRIMARY KEY DEFAULT nextval('dw.seq_user_key'),
     UserID INT NOT NULL,
     UserName VARCHAR(128) NOT NULL,
     UserRole VARCHAR(64) NOT NULL,

@@ -8,7 +8,7 @@ import pyodbc
 import pandas as pd
 
 Driver = 'ODBC Driver 18 for SQL Server'
-Server = 'TABLET-LTM0C509\SQLEXPRESS01'
+Server = r'TABLET-LTM0C509\SQLEXPRESS01'
 Database = 'CS779_LabHub_final'
 
 def get_connection(): 
