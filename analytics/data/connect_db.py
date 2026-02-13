@@ -6,12 +6,22 @@ IT ALSO HAS SOME TEST FUNCTIONS TO CHECK THE CONNECTIONS AND RUN SAMPLE QUERIES.
 
 import pyodbc
 import pandas as pd
+import duckdb
+from pathlib import Path
+
+# -------------------------
+# Config
+# -------------------------
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+WAREHOUSE_DB = PROJECT_ROOT / "warehouse" / "warehouse.duckdb"
+
 
 Driver = 'ODBC Driver 18 for SQL Server'
 Server = r'TABLET-LTM0C509\SQLEXPRESS01'
 Database = 'CS779_LabHub_final'
 
-def get_connection(): 
+def get_oltp_connection(): 
+    """Returns a connection to the SQL Server OLTP."""
     conn_str = ( 
         f"DRIVER={{{Driver}}};"
         f"SERVER={Server};"
@@ -22,8 +32,12 @@ def get_connection():
     ) 
     return pyodbc.connect(conn_str)
 
+def get_warehouse_conn():
+    """Returns a connection to the DuckDB Warehouse."""
+    return duckdb.connect(str(WAREHOUSE_DB))
+
 def test_query():
-    conn = get_connection()
+    conn = get_oltp_connection()
     query = "SELECT TOP 5 * FROM core.UserRole;"  # change to a table that exists
     df = pd.read_sql(query, conn)
     print(df)

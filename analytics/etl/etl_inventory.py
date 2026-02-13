@@ -20,16 +20,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WAREHOUSE_DB = PROJECT_ROOT / "warehouse" / "warehouse.duckdb"
 
 # -------------------------
-# Connections
-# -------------------------
-def get_warehouse_conn():
-    return duckdb.connect(str(WAREHOUSE_DB))
-
-
-def get_duckdb_conn():
-    return duckdb.connect(str(WAREHOUSE_DB))
-
-# -------------------------
 # Extract
 # -------------------------
 
