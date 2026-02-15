@@ -76,10 +76,10 @@ def load_fact_inventory(df_fact_inventory: pd.DataFrame):
                 tmp_fact_inventory.CurrentStockSnapshot,
                 tmp_fact_inventory.EventType
             FROM tmp_fact_inventory
-            JOIN dw.Dim_Date ON CAST(strftime(tmp_fact_inventory.EventDate, '%Y%m%d') AS INT) = Dim_Date.DateKey
-            JOIN dw.Dim_Product ON tmp_fact_inventory.ProductID = Dim_Product.ProductID
-            JOIN dw.Dim_Location ON tmp_fact_inventory.LocationID = Dim_Location.LocationID
-            JOIN dw.Dim_User ON tmp_fact_inventory.UserID = Dim_User.UserID;
+            JOIN dw.Dim_Date ON CAST(strftime(tmp_fact_inventory.EventDate, '%Y%m%d') AS INT) = dw.Dim_Date.DateKey
+            JOIN dw.Dim_Product ON tmp_fact_inventory.ProductID = dw.Dim_Product.ProductID
+            JOIN dw.Dim_Location ON tmp_fact_inventory.LocationID = dw.Dim_Location.LocationID
+            JOIN dw.Dim_User ON tmp_fact_inventory.UserID = dw.Dim_User.UserID;
         """)
         
         duck_conn.execute("COMMIT;")
