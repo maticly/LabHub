@@ -160,7 +160,7 @@ def create_analytics_views():
         conn.execute("""
         CREATE OR REPLACE VIEW dw.v_location_hotspots AS
         WITH LatestProductStock AS (
-            -- Find the LATEST snapshot for every product in every location
+            -- latest snapshot for every product in every location
             SELECT 
                 LocationKey,
                 ProductKey,
@@ -245,9 +245,11 @@ def create_analytics_views():
                 GROUP BY ProductKey
             )
         SELECT 
+            dw.Dim_Product.ProductID,
             dw.Dim_Product.ProductName,
             dw.Dim_Product.CategoryName,
             dw.Dim_Product.UnitOfMeasure,
+            dw.Dim_Product.Description,
             SUM(CASE WHEN dw.Fact_Inventory_Transactions.QuantityDelta < 0 
                     AND dw.Fact_Inventory_Transactions.DateKey >= (SELECT key_30d FROM DateThresholds) 
                     THEN ABS(dw.Fact_Inventory_Transactions.QuantityDelta) ELSE 0 END) AS Usage30d,
@@ -259,7 +261,7 @@ def create_analytics_views():
         FROM dw.Dim_Product
         JOIN dw.Fact_Inventory_Transactions ON dw.Dim_Product.ProductKey = dw.Fact_Inventory_Transactions.ProductKey
         LEFT JOIN GlobalStockLevels ON dw.Dim_Product.ProductKey = GlobalStockLevels.ProductKey
-        GROUP BY 1, 2, 3
+        GROUP BY 1, 2, 3, 4, 5
         ORDER BY Usage30d DESC;
         """)
 

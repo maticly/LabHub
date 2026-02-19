@@ -1,9 +1,9 @@
 --
 --THIS IS THE WAREHOUSE SCHEMA FILE.
 --
-
 -- Create schema
 CREATE SCHEMA IF NOT EXISTS dw;
+
 
 -- Sequences for auto-incrementing keys
 CREATE SEQUENCE IF NOT EXISTS dw.seq_product_key;
@@ -33,8 +33,14 @@ CREATE TABLE IF NOT EXISTS dw.Dim_Product (
     ProductID INT NOT NULL,
     ProductName VARCHAR(128) NOT NULL,
     CategoryName VARCHAR(64) NOT NULL,
-    UnitOfMeasure VARCHAR(64) NOT NULL
+    UnitOfMeasure VARCHAR(64) NOT NULL,
+    Description TEXT
 );
+
+--------------------------------
+ALTER TABLE dw.Dim_Product
+ADD Description TEXT;
+---------------------------------
 
 -- =========================
 -- Dimension: Dim_Location

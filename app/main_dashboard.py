@@ -1,4 +1,4 @@
-"""Main Entry point (Streamlit)"""
+"""Main Entry point for Streamlit"""
 
 import streamlit as st
 import pandas as pd
@@ -7,6 +7,8 @@ from analytics.data.connect_db import PROJECT_ROOT
 from analytics.data.connect_db import WAREHOUSE_DB
 from app.styles import apply_custom_style
 import plotly.express as px
+from vector.search import semantic_search
+from inventory_helpers import show_stock_detail
 
 
 # Page Configuration
@@ -85,7 +87,7 @@ with tab_warehouse:
     with col1:
         # If low stock is 0, we don't need a red alert
         st.metric(
-            label="📦 Low Stock - Please Order", 
+            label="Low Stock - Please Order", 
             value=low_stock, 
             delta="Critical Items" if low_stock > 0 else "All Clear",
             delta_color="inverse" if low_stock > 0 else "normal"
@@ -93,24 +95,24 @@ with tab_warehouse:
         
     with col2:
         st.metric(
-            label="📅 Total Events This Month", 
+            label="Total Events This Month", 
             value=f"{int(curr_events):,}",
             delta=f"{mom_change:+.1f}% MoM" if mom_change != 0 else "New Data"
         )
 
     with col3:
         st.metric(
-            label="🚫 30d Zero Usage Items", 
-            value=zero_usage, 
-            delta="Stock Audit Reqd",
-            delta_color="off"
+            label="30 Days No Use Items", 
+            value=zero_usage,
+            delta="Action: Stock Audit" if zero_usage > 200 else "All Clear",
+            delta_color="inverse" if zero_usage > 200 else "normal"
         )
 
     with col4:
         st.metric(
-            label="🏆 Top Location", 
+            label="Top Location", 
             value=site, 
-            delta=f"Bldg: {bldg}",
+            delta=f"{bldg}",
             delta_color="off",
             help=f"Site: {site}\nBuilding: {bldg}" # Hover for full unclustered details
         )
@@ -121,7 +123,7 @@ with tab_warehouse:
     left_col, right_col = st.columns(2)
 
     with left_col:
-        st.subheader("📍 Room-Level Hotspots")
+        st.subheader("Room-Level Hotspots")
         st.caption("Usage and Local Stock by Site, Building, and Room")
         
         hotspot_detailed = get_data("v_location_hotspots")
@@ -132,7 +134,7 @@ with tab_warehouse:
                 "RoomNumber": "Room",
                 "TotalUsage": st.column_config.NumberColumn("Total Usage", format="%d 📉"),
                 "CurrentLocalStock": st.column_config.NumberColumn("Current Room Stock", format="%d 📦"),
-                "Last Updated": st.column_config.DateColumn("Last Updated", format='%Y%m%d'),
+                "LastUpdatedKey": st.column_config.DateColumn("Last Updated"),
                 "PercentOfLabUsage": st.column_config.ProgressColumn(
                     "% of Lab Total",
                     help="Usage in this room compared to the entire lab",
@@ -146,15 +148,20 @@ with tab_warehouse:
         )
 
     with right_col:
-        st.subheader("🧪 Global Demand Intelligence")
+        st.subheader("Global Demand Intelligence")
         st.caption("Product performance over 30 days vs 6 months")
         
         performance_df = get_data("v_product_performance_global")
+        if not performance_df.empty:
+            cols = [c for c in performance_df.columns if c != 'Description']
+            performance_df = performance_df[cols + ['Description']]
+
         max_stock = int(performance_df["GlobalStockBalance"].max()) if not performance_df.empty else 100
 
         st.dataframe(
             performance_df,
             column_config={
+                "ProductID": None,
                 "Usage30d": st.column_config.NumberColumn("30d Usage", format="%d"),
                 "Usage6m": st.column_config.NumberColumn("6m Usage", format="%d"),
                 "GlobalStockBalance": st.column_config.ProgressColumn(
@@ -191,8 +198,9 @@ with tab_warehouse:
     # Add a search filter just for this table
     search_term = st.text_input("🔍 Search Products or Locations", placeholder="🔍 Type e.g., DNA, Gloves...")
     if search_term:
-        matrix_data = matrix_data[matrix_data.stack().str.contains(search_term, case=False).groupby(level=0).any(axis=1)]
-    
+        mask = matrix_data.astype(str).apply(lambda x: x.str.contains(search_term, case=False)).any(axis=1)
+        matrix_data = matrix_data[mask]
+
     styled_df = matrix_data.style.map(color_stock_logic, subset=['CurrentStock', 'StockBuffer'])
     st.dataframe(styled_df, 
                 column_config={
@@ -266,8 +274,108 @@ with tab_warehouse:
 
         st.plotly_chart(fig, width="stretch", config={'displayModeBar': False})
 
+##---------------Search tab
+
+def render_tab_search_logic(db_path):
+    st.title("Semantic Lab Inventory Search")
+
+    # Load warehouse view
+    stock_data = get_data("v_product_performance_global")
+    stock_data["ProductID"] = stock_data["ProductID"].astype(str)
+
+    # --- Sidebar Filters ---
+    st.sidebar.header("Search Filters")
+    category_filter = st.sidebar.multiselect(
+        "Filter by Category",
+        options=sorted(stock_data["CategoryName"].unique()),
+        default=sorted(stock_data["CategoryName"].unique()),
+        key="search_cat_filter"
+    )
+    
+    # --- Search Input ---
+    query = st.text_input("Search for items by use-case (e.g., 'things for cleaning glass' or 'PCR reagents')",
+                          placeholder="🔍 Type e.g., Durable glass beaker for heating",
+                          key="semantic_search_input")
+    
+    if not query:
+        st.info("Enter a query above to begin searching.")
+        return
+    
+    # get matches from ChromaDB
+    matches = semantic_search(query, n_results=15)
+        
+    if not matches:
+        st.warning("No matches found in the vector store.")
+        return
+
+    # query DuckDB
+    try:
+        match_map = {m['id']: m['distance'] for m in matches}
+        product_ids = list(match_map.keys())
+        
+        df_results = stock_data[stock_data["ProductID"].isin(product_ids)]
+        df_results = df_results[df_results["CategoryName"].isin(category_filter)]
+
+        # Display Results
+        if df_results.empty:
+            st.info("Matches found, but they don't match your category filters.")
+        else:
+            # Map distances back to the dataframe for sorting
+            df_results['score'] = df_results['ProductID'].astype(str).map(match_map)
+            df_results = df_results.sort_values('score')
+
+            # Fetch location paths for matched products
+            conn = duckdb.connect(db_path)
+            placeholders = ", ".join(["?"] * len(product_ids))
+
+            location_df = conn.execute(f"""
+                SELECT
+                    p.ProductID,
+                    CONCAT_WS(' • ', l.SiteName, l.Building, l.RoomNumber, l.StorageType) AS LocationPath
+                FROM dw.Fact_Inventory_Transactions t
+                JOIN dw.Dim_Product p ON t.ProductKey = p.ProductKey
+                JOIN dw.Dim_Location l ON t.LocationKey = l.LocationKey
+                WHERE p.ProductID IN ({placeholders})
+                GROUP BY p.ProductID, LocationPath
+            """, product_ids).df()
+
+            conn.close()
+
+            # Aggregates locations
+            location_df = (
+                location_df.groupby("ProductID")["LocationPath"]
+                .apply(lambda x: " | ".join(sorted(set(x))))
+                .to_dict()
+            )
+
+            for _, row in df_results.iterrows():
+                with st.container():
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.subheader(row['ProductName'])
+                        st.caption(f"**Category:** {row['CategoryName']}")
+
+                        locs = location_df.get(row["ProductID"], "Not currently in stock")
+                        st.markdown(f"📍 **Available at:** {locs}")
+                        st.write(row['Description'] if row['Description'] else "No description available.")
+
+                    with col2:
+                        # Converts distance to a 'match percentage' for the UI
+                        match_pct = max(0, int((1 - row['score']) * 100))
+                        st.metric("Global Stock", int(row["GlobalStockBalance"]))
+                        
+                        if st.button("View Details", key=f"btn_{row['ProductID']}"):
+                            show_stock_detail(row['ProductID'], db_path)
+        conn.close()
+    except Exception as e:
+        st.error(f"Error querying the database: {e}")
+
+st.divider()
+
 with tab_search:
-    st.warning("Intelligence Engine Offline: Vector index not found.")
+    render_tab_search_logic(str(WAREHOUSE_DB))
+
+##-----------------
 
 with tab_compliance:
     st.subheader("📜 System Audit Trail")
