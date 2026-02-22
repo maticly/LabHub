@@ -1,4 +1,30 @@
-"""Main Entry point for Streamlit"""
+"""
+main_dashboard.py
+This module serves as the main entry point for the Streamlit application, LabHub, which provides 
+inventory analytics and audit trail functionalities for laboratory management. 
+The application connects to a DuckDB database to retrieve and display various metrics related to 
+inventory, including stock levels, usage trends, and compliance logs.
+
+Key Features:
+- Page configuration for a user-friendly interface.
+- Dynamic KPI metrics for inventory management, including low stock alerts and usage statistics.
+- Interactive tabs for overview, semantic search, and compliance tracking.
+- Data visualization using Plotly for usage trends and product demand.
+- Search functionality leveraging semantic search for efficient product discovery.
+- Audit trail display for regulatory compliance with export options.
+
+Modules Imported:
+- streamlit: For building the web application interface.
+- pandas: For data manipulation and analysis.
+- duckdb: For database connectivity and querying.
+- plotly.express: For creating interactive visualizations.
+- Custom modules for database connection and styling.
+
+Usage:
+To run the application, execute this script in a Python environment with the required dependencies installed.
+ The application will launch in a web browser, providing access to the various features outlined above.
+"""
+
 
 import streamlit as st
 import pandas as pd
@@ -9,6 +35,7 @@ from app.styles import apply_custom_style
 import plotly.express as px
 from vector.search import semantic_search
 from inventory_helpers import show_stock_detail
+from app.ui.kpi import kpi_card
 
 
 # Page Configuration
@@ -17,6 +44,10 @@ st.set_page_config(
     page_icon="🔬",
     layout="wide"
 )
+
+st.set_page_config(layout="wide")
+
+apply_custom_style()
 
 # Apply the custom style
 apply_custom_style()
@@ -29,9 +60,8 @@ def get_data(view_name):
 
 # --- HEADER ---
 st.title("🔬 LabHub Intelligence")
-st.markdown("<p style='color: #424245; font-size: 1.2rem;'>Advanced Inventory Analytics & Audit Trail</p>", unsafe_allow_html=True)
+st.markdown("<p style='font-size: 1.2rem;'>Advanced Inventory Analytics & Audit Trail</p>", unsafe_allow_html=True)
 
-st.divider()
 
 # --- TABS ---
 tab_warehouse, tab_search, tab_compliance = st.tabs([
@@ -68,9 +98,7 @@ def get_kpi_metrics():
     hotspot_df = get_data("v_location_hotspots")
     if not hotspot_df.empty:
         top_row = hotspot_df.iloc[0]
-        # Since we use "LocationPath" now, let's split it back for the KPI card 
-        # or just take the whole path.
-        full_path = top_row['LocationPath'] # e.g., "Maincampus › Bioscia"
+        full_path = top_row['LocationPath'] 
         site = full_path.split(' › ')[0]
         bldg = full_path.split(' › ')[1] if ' › ' in full_path else "Main"
     else:
@@ -85,56 +113,43 @@ with tab_warehouse:
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        # If low stock is 0, we don't need a red alert
-        st.metric(
-            label="Low Stock - Please Order", 
-            value=low_stock, 
-            delta="Critical Items" if low_stock > 0 else "All Clear",
-            delta_color="inverse" if low_stock > 0 else "normal"
-        )
-        
+        kpi_card("Low Stock", low_stock, "Critical Items")
+
     with col2:
-        st.metric(
-            label="Total Events This Month", 
-            value=f"{int(curr_events):,}",
-            delta=f"{mom_change:+.1f}% MoM" if mom_change != 0 else "New Data"
-        )
+        kpi_card("Events This Month", f"{int(curr_events):,}",
+                f"{mom_change:+.1f}% MoM")
 
     with col3:
-        st.metric(
-            label="30 Days No Use Items", 
-            value=zero_usage,
-            delta="Action: Stock Audit" if zero_usage > 200 else "All Clear",
-            delta_color="inverse" if zero_usage > 200 else "normal"
-        )
+        kpi_card("30 Days No Use", zero_usage, "Stock Audit")
 
     with col4:
-        st.metric(
-            label="Top Location", 
-            value=site, 
-            delta=f"{bldg}",
-            delta_color="off",
-            help=f"Site: {site}\nBuilding: {bldg}" # Hover for full unclustered details
-        )
+        kpi_card("Top Location", site, bldg)
 
     st.divider()
 
     # --- ROW 2: DEMAND INTELLIGENCE ---
-    left_col, right_col = st.columns(2)
 
-    with left_col:
-        st.subheader("Room-Level Hotspots")
-        st.caption("Usage and Local Stock by Site, Building, and Room")
-        
-        hotspot_detailed = get_data("v_location_hotspots")
-        st.dataframe(
-            hotspot_detailed,
-            column_config={
-                "LocationPath": "Campus/Building",
-                "RoomNumber": "Room",
-                "TotalUsage": st.column_config.NumberColumn("Total Usage", format="%d 📉"),
-                "CurrentLocalStock": st.column_config.NumberColumn("Current Room Stock", format="%d 📦"),
-                "LastUpdatedKey": st.column_config.DateColumn("Last Updated"),
+    
+    st.subheader("Lab-Level Hotspots")
+    st.caption("Usage and Local Stock by Site, Building, and Room")
+
+    hotspot_detailed = get_data("v_location_hotspots")
+
+    st.dataframe(
+        hotspot_detailed,
+        column_config={
+            "LocationPath": "Campus/Building",
+            "RoomNumber": "Room",
+            "TotalUsage": st.column_config.NumberColumn("Total Usage", format="%d 📉"),
+            "CurrentLocalStock": st.column_config.NumberColumn("Current Room Stock", format="%d 📦"),
+            "LastUpdatedKey": st.column_config.DateColumn("Last Updated"),
+            "PercentOfCampusUsage": st.column_config.ProgressColumn(
+                "% of Campus Total",
+                help="Usage in this room compared to the entire campus",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100
+            ),
                 "PercentOfLabUsage": st.column_config.ProgressColumn(
                     "% of Lab Total",
                     help="Usage in this room compared to the entire lab",
@@ -143,42 +158,50 @@ with tab_warehouse:
                     max_value=100
                 )
             },
-            hide_index=True,
-            use_container_width=True
+        hide_index=True,
+        use_container_width=True
         )
-
-    with right_col:
-        st.subheader("Global Demand Intelligence")
-        st.caption("Product performance over 30 days vs 6 months")
         
-        performance_df = get_data("v_product_performance_global")
-        if not performance_df.empty:
-            cols = [c for c in performance_df.columns if c != 'Description']
-            performance_df = performance_df[cols + ['Description']]
 
-        max_stock = int(performance_df["GlobalStockBalance"].max()) if not performance_df.empty else 100
+    st.divider()
 
-        st.dataframe(
-            performance_df,
-            column_config={
+    st.subheader("Global Product Demand")
+    st.caption("Product usage over time & Stock Balance for whole organization")
+        
+    performance_df = get_data("v_product_performance_global")
+    if not performance_df.empty:
+        cols = [c for c in performance_df.columns if c != 'Description']
+        performance_df = performance_df[cols + ['Description']]
+
+    max_stock = int(performance_df["GlobalStockBalance"].max()) if not performance_df.empty else 100
+        
+    # search filter just for this table
+    search_term = st.text_input("🔍 Search Products", placeholder="🔍 Type e.g., DNA, Gloves...")
+    if search_term:
+        mask = performance_df.astype(str).apply(lambda x: x.str.contains(search_term, case=False)).any(axis=1)
+        performance_df = performance_df[mask]
+
+    st.dataframe(
+        performance_df,
+        column_config={
                 "ProductID": None,
-                "Usage30d": st.column_config.NumberColumn("30d Usage", format="%d"),
-                "Usage6m": st.column_config.NumberColumn("6m Usage", format="%d"),
                 "GlobalStockBalance": st.column_config.ProgressColumn(
                     "Global Stock Balance", 
                     format="%d", 
                     min_value=0, 
                     max_value=max(max_stock, 1)
                 ),
+                "Usage30d": st.column_config.NumberColumn("1 Month Usage", format="%d"),
+                "Usage6m": st.column_config.NumberColumn("6 Month Usage", format="%d"),
+                "Usage12m": st.column_config.NumberColumn("12 Month Usage", format="%d"),
             },
-            hide_index=True,
-            use_container_width=True
+        hide_index=True,
+        use_container_width=True
         )
 
-    st.divider()
 
 
-    # --- ROW 3: DISTRIBUTION & HOTSPOTS ---
+    # --- ROW 3: Local Product Distribution ---
     st.subheader("🏢 Local Product Distribution")
     matrix_data = get_data("v_product_distribution_detailed")
     
@@ -189,13 +212,13 @@ with tab_warehouse:
         except:
             return 'color: white'
         
-    # Convert all numeric columns to integers to remove decimals
+    # all numeric columns to integers to remove decimals
     cols_to_fix = ['CurrentStock', 'LocalUsage1Y', 'Threshold', 'StockBuffer']
     for col in cols_to_fix:
         if col in matrix_data.columns:
             matrix_data[col] = matrix_data[col].fillna(0).astype(int)
 
-    # Add a search filter just for this table
+    # search filter just for this table
     search_term = st.text_input("🔍 Search Products or Locations", placeholder="🔍 Type e.g., DNA, Gloves...")
     if search_term:
         mask = matrix_data.astype(str).apply(lambda x: x.str.contains(search_term, case=False)).any(axis=1)
@@ -204,7 +227,9 @@ with tab_warehouse:
     styled_df = matrix_data.style.map(color_stock_logic, subset=['CurrentStock', 'StockBuffer'])
     st.dataframe(styled_df, 
                 column_config={
-                    "LocalUsage1Y": "Last 12m Use (Local)",
+                    "LocalUsage1M": "1 Month Local Usage",
+                    "LocalUsage6M": "6 Months Local Usage",
+                    "LocalUsage1Y": "12 Months Local Usage",
                     "Threshold": "Recommended MIN Stock",
                     "StockBuffer": st.column_config.ProgressColumn(
                         "Threshold",
@@ -281,6 +306,7 @@ def render_tab_search_logic(db_path):
 
     # Load warehouse view
     stock_data = get_data("v_product_performance_global")
+    
     stock_data["ProductID"] = stock_data["ProductID"].astype(str)
 
     # --- Sidebar Filters ---
@@ -330,13 +356,12 @@ def render_tab_search_logic(db_path):
 
             location_df = conn.execute(f"""
                 SELECT
-                    p.ProductID,
-                    CONCAT_WS(' • ', l.SiteName, l.Building, l.RoomNumber, l.StorageType) AS LocationPath
-                FROM dw.Fact_Inventory_Transactions t
-                JOIN dw.Dim_Product p ON t.ProductKey = p.ProductKey
-                JOIN dw.Dim_Location l ON t.LocationKey = l.LocationKey
-                WHERE p.ProductID IN ({placeholders})
-                GROUP BY p.ProductID, LocationPath
+                    dw.Dim_Product.ProductID,
+                    dw.v_product_distribution_detailed.LocationPath
+                FROM dw.v_product_distribution_detailed
+                JOIN dw.Dim_Product ON dw.v_product_distribution_detailed.ProductName = dw.Dim_Product.ProductName
+                WHERE dw.Dim_Product.ProductID IN ({placeholders}) 
+                AND dw.v_product_distribution_detailed.CurrentStock > 0
             """, product_ids).df()
 
             conn.close()
@@ -355,14 +380,14 @@ def render_tab_search_logic(db_path):
                         st.subheader(row['ProductName'])
                         st.caption(f"**Category:** {row['CategoryName']}")
 
-                        locs = location_df.get(row["ProductID"], "Not currently in stock")
-                        st.markdown(f"📍 **Available at:** {locs}")
+                        stock = int(row["GlobalStockBalance"])
+                        st.markdown(f"📦 **Global Stock:** {stock}")
                         st.write(row['Description'] if row['Description'] else "No description available.")
 
                     with col2:
                         # Converts distance to a 'match percentage' for the UI
                         match_pct = max(0, int((1 - row['score']) * 100))
-                        st.metric("Global Stock", int(row["GlobalStockBalance"]))
+                        st.metric("Match", f"{match_pct}%")
                         
                         if st.button("View Details", key=f"btn_{row['ProductID']}"):
                             show_stock_detail(row['ProductID'], db_path)
@@ -385,9 +410,11 @@ with tab_compliance:
     log_data = get_data("v_movement_log")
 
     # 2. Layout & Search (Single Column Definition)
-    search_col, export_col = st.columns([3, 1])
+    #search_col, export_col = st.columns([1, 2])
+    toolbar = st.container()
+    col1, col2 = toolbar.columns([1,1])
 
-    with search_col:
+    with toolbar:
         # label_visibility="collapsed" is the secret to vertical alignment
         log_filter = st.text_input(
             "Filter Search", 
@@ -402,7 +429,7 @@ with tab_compliance:
     else:
         display_df = log_data
 
-    with export_col:
+    with toolbar:
         # Export the CURRENT filtered view
         csv = display_df.to_csv(index=False).encode('utf-8')
         st.download_button(

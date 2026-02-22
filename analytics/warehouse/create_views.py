@@ -52,7 +52,7 @@ def create_analytics_views():
         conn.execute("""
         CREATE OR REPLACE VIEW dw.v_kpi_stock_risk AS
         WITH ProductMax AS (
-            -- Calculate 20% of the peak historical stock as the threshold
+            -- Calculates 20% of the peak historical stock as the threshold
             SELECT 
                 ProductKey,
                 MAX(AbsoluteQuantity) * 0.20 AS LowStockThreshold
@@ -190,7 +190,16 @@ def create_analytics_views():
             LabGlobalUsage AS (
                 SELECT SUM(ABS(QuantityDelta)) as GlobalTotal
                 FROM dw.Fact_Inventory_Transactions
-                WHERE QuantityDelta < 0
+                WHERE QuantityDelta < 0 --to show only gross number, not inventory change
+            ),
+            CampusUsage AS (
+                SELECT
+                    dw.Dim_Location.SiteName,
+                    SUM(ABS(dw.Fact_Inventory_Transactions.QuantityDelta)) AS CampusTotal
+                    FROM dw.Fact_Inventory_Transactions
+                    JOIN dw.Dim_Location ON dw.Fact_Inventory_Transactions.LocationKey = dw.Dim_Location.LocationKey
+                    WHERE dw.Fact_Inventory_Transactions.QuantityDelta < 0 --to show only gross number, not inventory change
+                    GROUP BY dw.Dim_Location.SiteName
             )
         SELECT
             dw.Dim_Location.SiteName || ' › ' || dw.Dim_Location.Building as LocationPath,
@@ -200,15 +209,20 @@ def create_analytics_views():
                     THEN ABS(dw.Fact_Inventory_Transactions.QuantityDelta) ELSE 0 END) AS TotalUsage,
             -- Stock: The actual shelf balance from the CTE
             MAX(RoomStockBalance.TrueCurrentStock) AS CurrentLocalStock,
-            MAX(LatestDate.LastDateKey) AS LastUpdatedKey,
+            MAX(DATE(STRPTIME(CAST(LatestDate.LastDateKey AS VARCHAR), '%Y%m%d'))) AS LastUpdatedKey,
             -- Percentage: Usage vs Lab Global
             ROUND((SUM(CASE WHEN dw.Fact_Inventory_Transactions.QuantityDelta < 0 
                             THEN ABS(dw.Fact_Inventory_Transactions.QuantityDelta) ELSE 0 END) * 100.0) 
-                  / (SELECT GlobalTotal FROM LabGlobalUsage), 2) as PercentOfLabUsage
+                  / (SELECT GlobalTotal FROM LabGlobalUsage), 2) as PercentOfLabUsage,
+            -- percentage of campus usage
+            ROUND((SUM(CASE WHEN dw.Fact_Inventory_Transactions.QuantityDelta < 0 
+                            THEN ABS(dw.Fact_Inventory_Transactions.QuantityDelta) ELSE 0 END) * 100.0) 
+                  / ANY_VALUE(CampusUsage.CampusTotal), 2) as PercentOfCampusUsage
         FROM dw.Fact_Inventory_Transactions
         JOIN dw.Dim_Location ON dw.Fact_Inventory_Transactions.LocationKey = dw.Dim_Location.LocationKey
         LEFT JOIN RoomStockBalance ON dw.Dim_Location.LocationKey = RoomStockBalance.LocationKey
         LEFT JOIN LatestDate ON dw.Dim_Location.LocationKey = LatestDate.LocationKey
+        LEFT JOIN CampusUsage ON dw.Dim_Location.SiteName = CampusUsage.SiteName
         GROUP BY 
             dw.Dim_Location.RoomNumber,
             dw.Dim_Location.SiteName || ' › ' || dw.Dim_Location.Building
@@ -221,7 +235,8 @@ def create_analytics_views():
         WITH DateThresholds AS (
             SELECT 
                 CAST(strftime(CURRENT_DATE - INTERVAL '30 days', '%Y%m%d') AS INTEGER) as key_30d,
-                CAST(strftime(CURRENT_DATE - INTERVAL '6 months', '%Y%m%d') AS INTEGER) as key_6m
+                CAST(strftime(CURRENT_DATE - INTERVAL '6 months', '%Y%m%d') AS INTEGER) as key_6m,
+                CAST(strftime(CURRENT_DATE - INTERVAL '12 months', '%Y%m%d') AS INTEGER) as key_12m
             ),
             LatestGlobalProductStock AS (
                 -- Find the latest snapshot for each product per location
@@ -256,6 +271,9 @@ def create_analytics_views():
             SUM(CASE WHEN dw.Fact_Inventory_Transactions.QuantityDelta < 0 
                     AND dw.Fact_Inventory_Transactions.DateKey >= (SELECT key_6m FROM DateThresholds) 
                     THEN ABS(dw.Fact_Inventory_Transactions.QuantityDelta) ELSE 0 END) AS Usage6m,
+            SUM(CASE WHEN dw.Fact_Inventory_Transactions.QuantityDelta < 0 
+                    AND dw.Fact_Inventory_Transactions.DateKey >= (SELECT key_12m FROM DateThresholds) 
+                    THEN ABS(dw.Fact_Inventory_Transactions.QuantityDelta) ELSE 0 END) AS Usage12m,
             -- Global Balance: Sum of all transactions. 
             MAX(GlobalStockLevels.TotalGlobalStock) AS GlobalStockBalance
         FROM dw.Dim_Product
@@ -295,8 +313,12 @@ def create_analytics_views():
             FROM dw.Fact_Inventory_Transactions GROUP BY ProductKey
         ),
         LocalUsage AS (
-            SELECT ProductKey, LocationKey, 
-                   SUM(CASE WHEN QuantityDelta < 0 AND DateKey >= CAST(strftime(CURRENT_DATE - INTERVAL '1 year', '%Y%m%d') AS INTEGER) 
+            SELECT ProductKey, LocationKey,
+                SUM(CASE WHEN QuantityDelta < 0 AND DateKey >= CAST(strftime(CURRENT_DATE - INTERVAL '30 days', '%Y%m%d') AS INTEGER) 
+                            THEN ABS(QuantityDelta) ELSE 0 END) as LocalUsage1M,
+                SUM(CASE WHEN QuantityDelta < 0 AND DateKey >= CAST(strftime(CURRENT_DATE - INTERVAL '6 months', '%Y%m%d') AS INTEGER) 
+                            THEN ABS(QuantityDelta) ELSE 0 END) as LocalUsage6M,
+                SUM(CASE WHEN QuantityDelta < 0 AND DateKey >= CAST(strftime(CURRENT_DATE - INTERVAL '1 year', '%Y%m%d') AS INTEGER) 
                             THEN ABS(QuantityDelta) ELSE 0 END) as LocalUsage1Y
             FROM dw.Fact_Inventory_Transactions GROUP BY 1, 2
         ),
@@ -324,6 +346,7 @@ def create_analytics_views():
         LEFT JOIN ProductThresholds ON dw.Fact_Inventory_Transactions.ProductKey = ProductThresholds.ProductKey
         GROUP BY 1, 2, 3, 4;
         """)
+        
 
         # --- 7. User x Product Consumption (Accountability)   
         conn.execute("""

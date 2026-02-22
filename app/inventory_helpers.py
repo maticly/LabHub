@@ -2,6 +2,7 @@ import streamlit as st
 import duckdb
 import plotly.express as px
 from vector.search import semantic_search
+import pandas as pd
 
 
 @st.dialog("📦 Product Stock Details", width="large")
@@ -10,37 +11,56 @@ def show_stock_detail(product_id, db_path):
     
     # Current Total and Product Info
     product_info = conn.execute("""
-        SELECT 
-            dw.Dim_Product.ProductName, 
-            dw.Dim_Product.CategoryName, 
-            COALESCE(SUM(dw.Fact_Inventory_Transactions.AbsoluteQuantity), 0) as TotalStock
-        FROM dw.Dim_Product
-        JOIN dw.Fact_Inventory_Transactions ON dw.Dim_Product.ProductKey = dw.Fact_Inventory_Transactions.ProductKey
-        WHERE dw.Dim_Product.ProductID = ?
-        GROUP BY dw.Dim_Product.ProductName, dw.Dim_Product.CategoryName
-    """, [product_id]).fetchone()
+    SELECT 
+        dp.ProductName,
+        dp.CategoryName,
+        COALESCE(SUM(v.CurrentStock),0) AS TotalStock
+    FROM dw.v_product_distribution_detailed v
+    JOIN dw.Dim_Product dp
+        ON v.ProductName = dp.ProductName
+    WHERE dp.ProductID = ?
+    GROUP BY dp.ProductName, dp.CategoryName
+""", [product_id]).fetchone()
     
     if not product_info:
         st.error("Product not found in warehouse.") 
         conn.close() 
         return
-    
+ 
     st.header(product_info[0]) 
     st.subheader(f"Total Inventory: {int(product_info[2])} units") 
     st.divider() 
 
     st.write("### 📍 Location Breakdown")
+    
+
     location_df = conn.execute("""
+    WITH LatestState AS (
         SELECT 
-            CONCAT(dw.Dim_Location.SiteName) AS LocationPath,
-            CAST(SUM(dw.Fact_Inventory_Transactions.AbsoluteQuantity) AS INTEGER) AS Stock
+            ProductKey,
+            LocationKey,
+            AbsoluteQuantity,
+            ROW_NUMBER() OVER (
+                PARTITION BY ProductKey, LocationKey
+                ORDER BY DateKey DESC, TransactionID DESC
+            ) AS r
         FROM dw.Fact_Inventory_Transactions
-        JOIN dw.Dim_Location ON dw.Fact_Inventory_Transactions.LocationKey = dw.Dim_Location.LocationKey
-        JOIN dw.Dim_Product ON dw.Fact_Inventory_Transactions.ProductKey = dw.Dim_Product.ProductKey
-        WHERE dw.Dim_Product.ProductID = ?
-        GROUP BY 1
-        HAVING Stock > 0
-    """, [product_id]).df()
+    )
+    SELECT 
+        dl.SiteName AS LocationPath,
+        CAST(ls.AbsoluteQuantity AS INT) AS CurrentStock
+    FROM LatestState ls
+    JOIN dw.Dim_Product dp 
+        ON ls.ProductKey = dp.ProductKey
+    JOIN dw.Dim_Location dl
+        ON ls.LocationKey = dl.LocationKey
+    WHERE dp.ProductID = ?
+      AND ls.r = 1
+      AND ls.AbsoluteQuantity > 0
+""", [product_id]).df()
+
+
+
 
     if location_df.empty:
         st.info("This product exists in the catalog but is not currently in stock at any location.")

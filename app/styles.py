@@ -1,144 +1,172 @@
 """CSS styling"""
 import streamlit as st
+from pathlib import Path
 
 def apply_custom_style():
+    
     st.markdown("""
-        <style>
+    <style>
+/* =============FORCE LIGHT THEME */
 
-        /* ================= GLOBAL APP (UNCHANGED) ================= */
-        .stApp {
-            background-color: #FBFBFD;
-            font-family: 'Inter', -apple-system, sans-serif !important;
-        }
+:root {
+    color-scheme: light !important;
+}
 
-        h1, h2, h3, h4, h5, h6, p, li, label, 
-        .stMarkdown, [data-testid="stWidgetLabel"] p {
-            color: #1D1D1F !important;
-        }
+/* Streamlit theme variables override */
+html, body, .stApp {
+    background-color: #FBFBFD !important;
+    color: #1D1D1F !important;
+}
 
-        /* ================= SETTINGS / DEPLOY MENU ================= */
-        div[role="menu"] {
-            background-color: #1C1C1E !important;
-            border-radius: 10px !important;
-        }
+/* kill dark auto theme */
+@media (prefers-color-scheme: dark) {
 
-        div[role="menu"] * {
-            color: #FFFFFF !important;
-        }
+    html, body, .stApp {
+        background-color: #FBFBFD !important;
+        color: #1D1D1F !important;
+    }
+}
 
-        div[role="menu"] button:hover {
-            background-color: #2C2C2E !important;
-        }
+/* main block container */
+[data-testid="stAppViewContainer"] {
+    background-color: #FBFBFD !important;
+}
 
-        /* ================= SIDEBAR (FILTER AREA) ================= */
-        section[data-testid="stSidebar"] {
-            background-color: #2F2F33 !important; /* dark gray box */
-            padding: 10px !important;
-        }
+     
 
-        /* Sidebar text DARK (as requested) */
-        section[data-testid="stSidebar"] h1,
-        section[data-testid="stSidebar"] h2,
-        section[data-testid="stSidebar"] h3,
-        section[data-testid="stSidebar"] p,
-        section[data-testid="stSidebar"] label {
-            color: #d9d7d7 !important;
-            font-weight: 500 !important;
-        }
+/* ================= KPI CARDS ================= */
 
-        /* Sidebar multiselect container */
-        section[data-testid="stSidebar"] .stMultiSelect div {
-            background-color: #3A3A3F !important;
-            border-radius: 8px !important;
-            color: #111111 !important;
-        }
+.kpi-card {
+    background:#E9E9E9;
+    border-radius:14px;
+    padding:22px;
+    border:1px solid #65676B;
+    box-shadow:0 2px 8px rgba(0,0,0,0.08);
+    transition: all 0.25s ease;
+}
 
-        /* Sidebar multiselect selected tags */
-        section[data-testid="stSidebar"] .stMultiSelect span {
-            background-color: #4e79c2 !important; /* professional dark blue */
-            color: #FFFFFF !important;
-            border-radius: 6px !important;
-            padding: 1px 8px !important;
-        }
+.kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow:0 8px 18px rgba(0,0,0,0.10);
+}
 
-        /* ================= SIDEBAR BUTTONS ================= */
-        section[data-testid="stSidebar"] .stButton>button {
-            background-color: #0A3D91 !important;
-            color: #FFFFFF !important;
-            border: none !important;
-            border-radius: 8px !important;
-            height: 42px !important;
-            font-weight: 600 !important;
-            transition: 0.2s ease !important;
-        }
+.kpi-title {
+    font-size:18px;
+    color:#1D1D1F;
+    font-weight:400;
+    margin-bottom:6px;
+}
 
-        section[data-testid="stSidebar"] .stButton>button:hover {
-            background-color: #072E6B !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
-        }
+.kpi-value {
+    font-size:32px;
+    font-weight:700;
+    color:#1D1D1F;
+}
 
-        /* ================= MAIN PAGE BUTTONS (UNCHANGED STYLE) ================= */
-        .stButton>button {
-            background-color: #E1E1E3 !important;
-            color: #1D1D1F !important;
-            border-radius: 8px !important;
-            height: 45px !important;
-        }
+.kpi-sub {
+    font-size:15px;
+    color:#8E8E93;
+}
+    
 
-        .stButton>button:hover {
-            background-color: #1D1D1F !important;
-            color: #FFFFFF !important;
-        }
 
-        /* ================= TEXT INPUTS ================= */
-        div[data-testid="stTextInput"] input {
-            background-color: #E1E1E3 !important;
-            color: #1D1D1F !important;
-            border-radius: 8px !important;
-        }
+/* markdown + normal text inside tabs */
+[data-testid="stTabs"] div {
+    color: #4A4A4A !important;   /* dark gray */
+}
 
-        /* ================= METRICS ================= */
-        [data-testid="stMetric"] {
-            background-color: #FFFFFF !important;
-            border: 1px solid #CDCDCD !important;
-            padding: 20px !important;
-            border-radius: 15px !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
-        }
+                
+/* ================= DARK TABLES ================= */
 
-        /* ================= DIALOG / POPUP (DARK MODE) ================= */
-        div[data-testid="stDialog"] {
-            background-color: #1C1C1E !important;
-            color: #FFFFFF !important;
-            border-radius: 14px !important;
-            padding: 25px !important;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5) !important;
-        }
+[data-testid="stDataFrame"] {
+    background-color:#2C2C2E;
+    border-radius:12px;
+}
 
-        /* ALL text inside dialog white */
-        div[data-testid="stDialog"] * {
-            color: #FFFFFF !important;
-        }
+[data-testid="stDataFrame"] div[role="gridcell"],
+[data-testid="stDataFrame"] div[role="columnheader"] {
+    color:white !important;
+}
+                
+/* ================= DIVIDERS ================= */
 
-        /* Tables inside dialog */
-        div[data-testid="stDialog"] table {
-            background-color: #2C2C2E !important;
-        }
+hr, [data-testid="stDivider"] {
+    background-color: #D0D0D5 !important;
+    height: 1px !important;
+    border: none !important;
+}
 
-        div[data-testid="stDialog"] table * {
-            color: #FFFFFF !important;
-        }
+/* ================= DATAFRAME DARK STYLE ================= */
 
-        /* Dialog buttons */
-        div[data-testid="stDialog"] .stButton>button {
-            background-color: #0A3D91 !important;
-            color: #FFFFFF !important;
-        }
+[data-testid="stDataFrame"] {
+    background-color: #1C1C1E;
+    border-radius: 12px;
+}
 
-        div[data-testid="stDialog"] .stButton>button:hover {
-            background-color: #072E6B !important;
-            color: #FFFFFF !important;
-        }
+[data-testid="stDataFrame"] div[role="gridcell"],
+[data-testid="stDataFrame"] div[role="columnheader"] {
+    color: white !important;
+}
 
-        </style>
+/* ================= EXPORT BUTTON ================= */
+
+.stDownloadButton button {
+    background-color: #3A3A3F !important;
+    color: white !important;
+}
+
+/* ================= VIEW DETAILS BUTTON ================= */
+
+.stButton > button {
+    background-color: #E5E5EA !important;
+    color: #1D1D1F !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+}
+
+.stButton > button:hover {
+    background-color: #D1D1D6 !important;
+    color: #000000 !important;
+}
+                                
+/* ================= SEARCH INPUT TEXT ================= */
+
+div[data-testid="stTextInput"] input {
+    color: #e3e1e1 !important;
+}
+
+/* ================= METRIC TEXT ================= */
+
+[data-testid="stMetricValue"] {
+    color: #000000 !important;
+    font-weight: 700 !important;
+}
+
+[data-testid="stMetricLabel"] {
+    color: #1D1D1F !important;
+}
+                                
+/* ================= TABS TEXT ================= */
+
+button[role="tab"] {
+    color: #1D1D1F !important;   /* black text */
+    font-weight: 700 !important;
+}
+
+button[role="tab"][aria-selected="true"] {
+    color: #000000 !important;
+}
+
+button[role="tab"]:hover {
+    color: #000000 !important;
+}
+                                
+/* ================= FULL WIDTH SEARCH ================= */
+
+[data-testid="stTextInput"] {
+    width: 100%;
+}
+
+    </style>
     """, unsafe_allow_html=True)
