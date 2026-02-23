@@ -3,7 +3,8 @@ sqlalchemy
 pyodbc
 duckdb
 streamlit
+altair<5
 sentence-transformers
 chromadb
 python-dotenv
-altair<5
+
