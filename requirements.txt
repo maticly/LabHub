@@ -7,4 +7,3 @@ altair<5
 sentence-transformers
 chromadb
 python-dotenv
-imghdr
