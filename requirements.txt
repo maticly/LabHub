@@ -6,3 +6,4 @@ streamlit
 sentence-transformers
 chromadb
 python-dotenv
+altair<5

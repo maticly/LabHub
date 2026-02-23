@@ -2,7 +2,7 @@
 THIS IS THE ETL FILE FOR THE INVENTORY DOMAIN.
 
 Extracts from OLTP (SQL Server),
-transforms into Dim_Product shape,
+transforms into Dim and Fact,
 loads into DuckDB warehouse.
 """
 
