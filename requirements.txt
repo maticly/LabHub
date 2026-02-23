@@ -1,4 +1,4 @@
-/vendor_imghdr
+vendor_imghdr
 pandas
 sqlalchemy
 pyodbc
