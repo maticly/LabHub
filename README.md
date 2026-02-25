@@ -20,7 +20,7 @@ This project demonstrates modern data engineering practices: incremental loads, 
 ---
 
 ## 🏗️ Architecture
-```mermaid
+```code
 SQL Server (OLTP)
         ↓
 Python ETL Pipeline
@@ -37,7 +37,7 @@ Streamlit Dashboard + Vector Search
 ## 📁 Project Structure
 
 
-```mermaid
+```
 LabHub_final_CS779/
 ├── analytics/                     # Backend data logic (ETL, warehouse, connections)
 │   ├── data/                      # DB connectors + generated OLTP seed data
