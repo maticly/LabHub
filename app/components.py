@@ -8,3 +8,6 @@ python -m analytics.warehouse.data_quality
 
 python -m vector.search
 
+python -m analytics.etl.run_pipeline
+
+python -m streamlit run app/main_dashboard.py

@@ -118,52 +118,72 @@ LabHub_final_CS779/
 
 ```mermaid
 erDiagram
-    DIM_PRODUCT {
-        int ProductKey PK
-        int ProductID
-        string ProductName
-        string CategoryName
-        string UnitOfMeasure
-        string Description
+
+    %% =========================
+    %% Dimension Tables
+    %% =========================
+
+    Dim_Date {
+        INT DateKey PK
+        DATE FullDate
+        INT Day
+        INT Month
+        VARCHAR(32) MonthName
+        INT Quarter
+        INT Year
+        VARCHAR(32) DayOfWeek
     }
 
-    DIM_USER {
-        int UserKey PK
-        int UserID
-        string UserName
-        string Role
+    Dim_Product {
+        INT ProductKey PK
+        INT ProductID
+        VARCHAR(128) ProductName
+        VARCHAR(64) CategoryName
+        VARCHAR(64) UnitOfMeasure
+        TEXT Description
     }
 
-    DIM_LOCATION {
-        int LocationKey PK
-        int LocationID
-        string LocationName
-        string Region
+    Dim_Location {
+        INT LocationKey PK
+        INT LocationID
+        VARCHAR(256) SiteName
+        VARCHAR(256) Building
+        VARCHAR(256) RoomNumber
+        VARCHAR(32) StorageType
     }
 
-    DIM_DATE {
-        int DateKey PK
-        date FullDate
-        int Year
-        int Month
-        int Day
-        string DayOfWeek
+    Dim_User {
+        INT UserKey PK
+        INT UserID
+        VARCHAR(128) UserName
+        VARCHAR(64) UserRole
+        VARCHAR(255) DepartmentName
     }
 
-    FACT_INVENTORY_TRANSACTIONS {
-        int TransactionKey PK
-        int ProductKey FK
-        int UserKey FK
-        int LocationKey FK
-        int DateKey FK
-        int AbsoluteQuantity
-        string TransactionType
+    %% =========================
+    %% Fact Table
+    %% =========================
+
+    Fact_Inventory_Transactions {
+        INT TransactionID PK
+        INT DateKey FK
+        INT ProductKey FK
+        INT LocationKey FK
+        INT UserKey FK
+        DECIMAL QuantityDelta
+        DECIMAL AbsoluteQuantity
+        DECIMAL CurrentStockSnapshot
+        VARCHAR(32) EventType
     }
 
-    FACT_INVENTORY_TRANSACTIONS ||--|| DIM_PRODUCT : "ProductKey"
-    FACT_INVENTORY_TRANSACTIONS ||--|| DIM_USER : "UserKey"
-    FACT_INVENTORY_TRANSACTIONS ||--|| DIM_LOCATION : "LocationKey"
-    FACT_INVENTORY_TRANSACTIONS ||--|| DIM_DATE : "DateKey"
+    %% =========================
+    %% Relationships
+    %% =========================
+
+    Dim_Date ||--o{ Fact_Inventory_Transactions : "DateKey"
+    Dim_Product ||--o{ Fact_Inventory_Transactions : "ProductKey"
+    Dim_Location ||--o{ Fact_Inventory_Transactions : "LocationKey"
+    Dim_User ||--o{ Fact_Inventory_Transactions : "UserKey"
 ```
 
 ---

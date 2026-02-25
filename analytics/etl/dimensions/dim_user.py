@@ -58,58 +58,75 @@ def transform_dim_user(df_users: pd.DataFrame) -> pd.DataFrame:
 # -------------------------
 # Load
 # -------------------------
-def load_dim_user(dim_df: pd.DataFrame):
+def load_dim_user(duck_conn, dim_df: pd.DataFrame):
     """
-    Loads transformed data into DuckDB Dim_User.
+    Incremental SCD Type 1 upsert into dw.Dim_User.
     """
-    logger.info("Loading data into DuckDB dw.Dim_User...")
-    duck_conn = get_warehouse_conn()
-    try:
-        duck_conn.execute("BEGIN TRANSACTION;")
-        duck_conn.execute("DELETE FROM dw.Dim_User;") 
-        duck_conn.register("tmp_dim_user", dim_df)
-        duck_conn.execute("""
-            INSERT INTO dw.Dim_User (UserID, UserName, UserRole, DepartmentName)
-            SELECT UserID, UserName, UserRole, DepartmentName
-            FROM tmp_dim_user;
-        """)
-        duck_conn.execute("COMMIT;")
-        logger.info(f"Load complete. {len(dim_df)} rows inserted.")
-    except Exception as e:
-        if duck_conn:
-            duck_conn.execute("ROLLBACK;")
-        logger.error(f"Load failed for Dim_User: {e}")
-        raise
-    finally: 
-        duck_conn.close()
+    logger.info("Upserting data into dw.Dim_User...")
+    duck_conn.register("tmp_dim_user", dim_df)
 
-# -------------------------
-# Orchestration
-# -------------------------
-def run_dim_user_etl():
-    """Main function to run the User Dimension ETL."""
+    # Step 1: Update changed attributes on existing rows
+    duck_conn.execute("""
+        UPDATE dw.Dim_User
+        SET
+            UserName       = tmp_dim_user.UserName,
+            UserRole       = tmp_dim_user.UserRole,
+            DepartmentName = tmp_dim_user.DepartmentName
+        FROM tmp_dim_user
+        WHERE dw.Dim_User.UserID = tmp_dim_user.UserID
+          AND (
+              dw.Dim_User.UserName       IS DISTINCT FROM tmp_dim_user.UserName       OR
+              dw.Dim_User.UserRole       IS DISTINCT FROM tmp_dim_user.UserRole       OR
+              dw.Dim_User.DepartmentName IS DISTINCT FROM tmp_dim_user.DepartmentName
+          );
+    """)
+
+    # Step 2: Insert new users
+    duck_conn.execute("""
+        INSERT INTO dw.Dim_User (UserID, UserName, UserRole, DepartmentName)
+        SELECT
+            tmp_dim_user.UserID,
+            tmp_dim_user.UserName,
+            tmp_dim_user.UserRole,
+            tmp_dim_user.DepartmentName
+        FROM tmp_dim_user
+        WHERE NOT EXISTS (
+            SELECT 1 FROM dw.Dim_User
+            WHERE dw.Dim_User.UserID = tmp_dim_user.UserID
+        );
+    """)
+
+    logger.info(f"Dim_User upsert complete. Source rows: {len(dim_df)}.")
+
+
+# 4. ORCHESTRATION
+def run_dim_user_etl(duck_conn):
+    """
+    Orchestrates the User Dimension ETL.
+    Accepts a shared connection — does NOT open its own or manage transactions.
+    """
     try:
         raw_users = extract_users()
         dim_user_df = transform_dim_user(raw_users)
-        load_dim_user(dim_user_df)
+        load_dim_user(duck_conn, dim_user_df)
         logger.info("✅ Dim_User ETL completed successfully.")
     except Exception as e:
         logger.error(f"❌ Dim_User ETL failed: {e}")
+        raise
 
-# --- Self-Testing Block ---
-def test_user_load():
-    """Verify data exists in the warehouse."""
-    logger.info("🧪 Running Post-Load Test for Dim_User...")
+
+# --- Standalone entry point ---
+if __name__ == "__main__":
     duck_conn = get_warehouse_conn()
     try:
+        duck_conn.execute("BEGIN TRANSACTION;")
+        run_dim_user_etl(duck_conn)
+        duck_conn.execute("COMMIT;")
+
         count = duck_conn.execute("SELECT COUNT(*) FROM dw.Dim_User").fetchone()[0]
-        if count > 0:
-            logger.info(f"✅ Test Passed: {count} records found in Dim_User.")
-        else:
-            logger.warning("❌ Test Failed: Dim_User is empty.")
+        logger.info(f"🧪 Post-load check: {count} records in Dim_User.")
+    except Exception as e:
+        duck_conn.execute("ROLLBACK;")
+        logger.error(f"Standalone run failed: {e}")
     finally:
         duck_conn.close()
-
-if __name__ == "__main__":
-    run_dim_user_etl()
-    test_user_load()

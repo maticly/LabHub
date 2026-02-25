@@ -1,5 +1,8 @@
+USE CS779_LabHub_final;
+
 BULK INSERT inventory.StockEvent
-FROM 'C:\Users\mateu\OneDrive\Pulpit\GitHub\populate_tables\inventory_StockEvent.csv'
+FROM 'C:\Users\mateu\OneDrive\Pulpit\GitHub\LabHub_final_CS779\analytics\data\generated_data_OLTP\inventory_StockEvent_03.csv'
+
 WITH (
     FIRSTROW = 2,           -- Skips the header row
     FIELDTERMINATOR = ',',  -- Change to ';' if that's your delimiter
@@ -9,5 +12,3 @@ WITH (
 
 SELECT *
 FROM inventory.StockEvent;
-SELECT *
-FROM core.Product;

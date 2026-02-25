@@ -45,85 +45,84 @@ def extract_fact_source_data():
         conn.close()
 
 #3. Load
-def load_fact_inventory(df_fact_inventory: pd.DataFrame):
+def load_fact_inventory(duck_conn, df_fact_inventory: pd.DataFrame):
     """
     Performs dimension lookups and incrementally inserts only new rows
     into Fact_Inventory_Transactions, skipping any TransactionID that
     already exists.
     """
     logger.info("Performing incremental load into Fact_Inventory_Transactions...")
-    duck_conn = get_warehouse_conn()
-    try:
-        duck_conn.execute("BEGIN TRANSACTION;")
-        duck_conn.register("tmp_fact_inventory", df_fact_inventory)
-        
-        # Count existing rows before insert for accurate delta reporting
-        before_count = duck_conn.execute(
-            "SELECT COUNT(*) FROM dw.Fact_Inventory_Transactions"
-        ).fetchone()[0]
+    # Count existing rows before insert for accurate delta reporting
+    
+    before_count = duck_conn.execute(
+        "SELECT COUNT(*) FROM dw.Fact_Inventory_Transactions"
+    ).fetchone()[0]
 
-        # Register the raw data
-        duck_conn.register("tmp_fact_inventory", df_fact_inventory)
+    duck_conn.register("tmp_fact_inventory", df_fact_inventory)
 
-        duck_conn.execute("""
-            INSERT INTO dw.Fact_Inventory_Transactions (
+    duck_conn.execute("""
+        INSERT INTO dw.Fact_Inventory_Transactions (
                 TransactionID, DateKey, ProductKey, LocationKey, UserKey,
                 QuantityDelta, AbsoluteQuantity, CurrentStockSnapshot, EventType
-            )
-            SELECT 
-                tmp_fact_inventory.TransactionID,
-                Dim_Date.DateKey,
-                Dim_Product.ProductKey,
-                Dim_Location.LocationKey,
-                Dim_User.UserKey,
-                (tmp_fact_inventory.NewQuantity - tmp_fact_inventory.OldQuantity) AS QuantityDelta,
-                tmp_fact_inventory.NewQuantity AS AbsoluteQuantity,
-                tmp_fact_inventory.CurrentStockSnapshot,
-                tmp_fact_inventory.EventType
-            FROM tmp_fact_inventory
-            JOIN dw.Dim_Date ON CAST(strftime(tmp_fact_inventory.EventDate, '%Y%m%d') AS INT) = dw.Dim_Date.DateKey
-            JOIN dw.Dim_Product ON tmp_fact_inventory.ProductID = dw.Dim_Product.ProductID
-            JOIN dw.Dim_Location ON tmp_fact_inventory.LocationID = dw.Dim_Location.LocationID
-            JOIN dw.Dim_User ON tmp_fact_inventory.UserID = dw.Dim_User.UserID;
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM dw.Fact_Inventory_Transactions f
-                WHERE f.TransactionID = src.TransactionID
-        """)
-        
-        duck_conn.execute("COMMIT;")
-        
-        after_count = duck_conn.execute(
-            "SELECT COUNT(*) FROM dw.Fact_Inventory_Transactions"
-        ).fetchone()[0]
-        new_rows = after_count - before_count
-        logger.info(
-            f"✅ Incremental load complete. "
-            f"{new_rows} new rows inserted out of {len(df_fact_inventory)} source events."
         )
-        
-    except Exception as e:
-        if duck_conn:
-            duck_conn.execute("ROLLBACK;")
-        logger.error(f"❌ Fact Table Load Failed: {e}")
-        raise
-    finally:
-        duck_conn.close()
+        SELECT 
+            tmp_fact_inventory.TransactionID,
+            Dim_Date.DateKey,
+            Dim_Product.ProductKey,
+            Dim_Location.LocationKey,
+            Dim_User.UserKey,
+            (tmp_fact_inventory.NewQuantity - tmp_fact_inventory.OldQuantity) AS QuantityDelta,
+            tmp_fact_inventory.NewQuantity AS AbsoluteQuantity,
+            tmp_fact_inventory.CurrentStockSnapshot,
+            tmp_fact_inventory.EventType
+        FROM tmp_fact_inventory            
+        JOIN dw.Dim_Date ON CAST(strftime(tmp_fact_inventory.EventDate, '%Y%m%d') AS INT) = dw.Dim_Date.DateKey
+        JOIN dw.Dim_Product ON tmp_fact_inventory.ProductID = dw.Dim_Product.ProductID
+        JOIN dw.Dim_Location ON tmp_fact_inventory.LocationID = dw.Dim_Location.LocationID
+        JOIN dw.Dim_User ON tmp_fact_inventory.UserID = dw.Dim_User.UserID
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM dw.Fact_Inventory_Transactions
+            WHERE dw.Fact_Inventory_Transactions.TransactionID = tmp_fact_inventory.TransactionID
+        );
+    """)
+    after_count = duck_conn.execute(
+        "SELECT COUNT(*) FROM dw.Fact_Inventory_Transactions"
+    ).fetchone()[0]
+
+    new_rows = after_count - before_count
+    logger.info(
+        f"✅ Incremental load complete. "
+        f"{new_rows} new rows inserted out of {len(df_fact_inventory)} source events."
+    )
 
 # -------------------------
 # Orchestration
 # -------------------------
 
-def run_fact_inventory_etl():
-    """Main entry point for Fact Table ETL."""
+def run_fact_inventory_etl(duck_conn):
+    """
+    Orchestrates the Fact Inventory ETL.
+    Accepts a shared connection — does NOT open its own or manage transactions.
+    """
     try:
         df_source = extract_fact_source_data()
         if not df_source.empty:
-            load_fact_inventory(df_source)
+            load_fact_inventory(duck_conn, df_source)
         else:
             logger.warning("No source data found to load into Fact table.")
     except Exception as e:
         logger.error(f"Fact Inventory ETL aborted: {e}")
+        raise
 
 if __name__ == "__main__":
-    run_fact_inventory_etl()
+    duck_conn = get_warehouse_conn()
+    try:
+        duck_conn.execute("BEGIN TRANSACTION;")
+        run_fact_inventory_etl(duck_conn)
+        duck_conn.execute("COMMIT;")
+    except Exception as e:
+        duck_conn.execute("ROLLBACK;")
+        logger.error(f"Standalone run failed: {e}")
+    finally:
+        duck_conn.close()

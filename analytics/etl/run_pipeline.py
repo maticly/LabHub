@@ -3,7 +3,7 @@ from analytics.data.connect_db import get_warehouse_conn
 from analytics.etl.dimensions import dim_product, dim_user, dim_location, dim_date
 from analytics.etl.facts import fact_inventory
 from analytics.warehouse.create_views import create_analytics_views
-from analytics.etl.data_quality import run_dq_checks, print_dq_report
+from analytics.etl.data_quality import run_dq_checks, print_dq_report, inspect_warehouse
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -12,16 +12,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def run_inventory_warehouse():
+def run_inventory_warehouse(inspect: bool = False):
     """
     Run the Inventory Data Warehouse ETL pipeline.
 
     Coordinates dimension and fact loads:
     - Loads dimensions (date, product, user, location).
     - Loads facts: fact skip rows already present in OLAP
+
+    Args:
+        inspect: If True, prints a warehouse shape summary after a successful load.
     """
+    duck_conn = get_warehouse_conn()
     try:
-        duck_conn = get_warehouse_conn()
+        
         duck_conn.execute("BEGIN TRANSACTION;")
 
         # 1. Load Dimensions
@@ -54,32 +58,29 @@ def run_inventory_warehouse():
             logger.info("✅ All checks PASS")
             duck_conn.execute("COMMIT;")
         else:
-            logger.error("🛑 FAIL detected — redirecting data to staging and rolling back warehouse.")
-
-            # staging table exists
-            duck_conn.execute("""
-                CREATE TABLE IF NOT EXISTS staging.Fact_Inventory_Transactions_Failed AS
-                SELECT * FROM dw.Fact_Inventory_Transactions WHERE 1=0;
-            """)
-
-            # Move the bad load into staging
-            duck_conn.execute("""
-                INSERT INTO staging.Fact_Inventory_Transactions_Failed
-                SELECT * FROM dw.Fact_Inventory_Transactions;
-            """)
-
-            # Undo warehouse changes
+            logger.error("🛑 DQ FAILED — rolling back. Warehouse NOT updated.")
             duck_conn.execute("ROLLBACK;")
-
-            logger.error("❌ Warehouse NOT updated. Data moved to staging for review.")
-
+            logger.error(
+                "❌ Review the DQ report above. "
+                "No data was written to the warehouse."
+            )
+            return
 
         # 4. Refresh Views
         create_analytics_views()
+        logger.info("✅ Analytics views refreshed.")
+
+        if inspect:
+            inspect_warehouse(duck_conn)
 
         logger.info("✅ Warehouse Refresh Completed Successfully.")
+
     except Exception as e:
         logger.critical(f"Pipeline failed during execution: {e}")
+        try:
+            duck_conn.execute("ROLLBACK;")
+        except Exception:
+            pass
         raise
     finally:
         duck_conn.close()
