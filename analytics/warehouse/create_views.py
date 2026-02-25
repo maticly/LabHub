@@ -160,12 +160,12 @@ def create_analytics_views():
         conn.execute("""
         CREATE OR REPLACE VIEW dw.v_location_hotspots AS
         WITH LatestProductStock AS (
-            -- latest snapshot for every product in every location
+            -- latest snapshot for every product in every location as latest_rank = 1
             SELECT 
-                LocationKey,
+                LocationKey, --for each location and product key
                 ProductKey,
                 AbsoluteQuantity,
-                ROW_NUMBER() OVER (
+                ROW_NUMBER() OVER ( -- assign a row number based in the location, product, and latest transaction ID
                     PARTITION BY LocationKey, ProductKey 
                     ORDER BY DateKey DESC, TransactionID DESC
                 ) as latest_rank
@@ -179,12 +179,12 @@ def create_analytics_views():
             GROUP BY LocationKey
             ),
             RoomStockBalance AS (
-                -- Sum only the most recent snapshots for each room
+            -- Sum only the most recent snapshots for each room
                 SELECT 
                     LocationKey,
                     SUM(AbsoluteQuantity) as TrueCurrentStock
                 FROM LatestProductStock
-                WHERE latest_rank = 1
+                WHERE latest_rank = 1 -- the letest known stock snapshot of this product at this location
                 GROUP BY LocationKey
             ),
             LabGlobalUsage AS (
@@ -322,10 +322,10 @@ def create_analytics_views():
                             THEN ABS(QuantityDelta) ELSE 0 END) as LocalUsage1Y
             FROM dw.Fact_Inventory_Transactions GROUP BY 1, 2
         ),
-        LatestState AS (
+        LatestState AS ( --inventory = flow (how much moved) and state (how much left)
             SELECT ProductKey, LocationKey, AbsoluteQuantity,
                    ROW_NUMBER() OVER (PARTITION BY ProductKey, LocationKey ORDER BY DateKey DESC, TransactionID DESC) as r
-            FROM dw.Fact_Inventory_Transactions
+            FROM dw.Fact_Inventory_Transactions --ledger of every move 
         )
         SELECT 
             dw.Dim_Product.ProductName,

@@ -9,8 +9,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# -------------------------
-# Extract
+
+# 1.Extract
 # -------------------------
 
 def extract_fact_source_data():
@@ -44,22 +44,27 @@ def extract_fact_source_data():
     finally:
         conn.close()
 
+#3. Load
 def load_fact_inventory(df_fact_inventory: pd.DataFrame):
     """
-    Performs lookups against Warehouse Dimensions and calculates metrics.
+    Performs dimension lookups and incrementally inserts only new rows
+    into Fact_Inventory_Transactions, skipping any TransactionID that
+    already exists.
     """
-    logger.info("Performing dimension lookups and loading Fact table...")
+    logger.info("Performing incremental load into Fact_Inventory_Transactions...")
     duck_conn = get_warehouse_conn()
     try:
         duck_conn.execute("BEGIN TRANSACTION;")
-
-        duck_conn.execute("DELETE FROM dw.Fact_Inventory_Transactions;")
+        duck_conn.register("tmp_fact_inventory", df_fact_inventory)
         
+        # Count existing rows before insert for accurate delta reporting
+        before_count = duck_conn.execute(
+            "SELECT COUNT(*) FROM dw.Fact_Inventory_Transactions"
+        ).fetchone()[0]
+
         # Register the raw data
         duck_conn.register("tmp_fact_inventory", df_fact_inventory)
 
-        # Transformation + Lookup + Load
-        # QuantityDelta (New - Old) and use NewQuantity as AbsoluteQuantity
         duck_conn.execute("""
             INSERT INTO dw.Fact_Inventory_Transactions (
                 TransactionID, DateKey, ProductKey, LocationKey, UserKey,
@@ -80,10 +85,22 @@ def load_fact_inventory(df_fact_inventory: pd.DataFrame):
             JOIN dw.Dim_Product ON tmp_fact_inventory.ProductID = dw.Dim_Product.ProductID
             JOIN dw.Dim_Location ON tmp_fact_inventory.LocationID = dw.Dim_Location.LocationID
             JOIN dw.Dim_User ON tmp_fact_inventory.UserID = dw.Dim_User.UserID;
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM dw.Fact_Inventory_Transactions f
+                WHERE f.TransactionID = src.TransactionID
         """)
         
         duck_conn.execute("COMMIT;")
-        logger.info(f"✅ Fact_Inventory_Transactions load complete.")
+        
+        after_count = duck_conn.execute(
+            "SELECT COUNT(*) FROM dw.Fact_Inventory_Transactions"
+        ).fetchone()[0]
+        new_rows = after_count - before_count
+        logger.info(
+            f"✅ Incremental load complete. "
+            f"{new_rows} new rows inserted out of {len(df_fact_inventory)} source events."
+        )
         
     except Exception as e:
         if duck_conn:

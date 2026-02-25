@@ -37,11 +37,6 @@ CREATE TABLE IF NOT EXISTS dw.Dim_Product (
     Description TEXT
 );
 
---------------------------------
-ALTER TABLE dw.Dim_Product
-ADD Description TEXT;
----------------------------------
-
 -- =========================
 -- Dimension: Dim_Location
 -- =========================

@@ -71,11 +71,42 @@ tab_warehouse, tab_search, tab_compliance = st.tabs([
 ])
 
 # kpi logic for warehouse tab
+# ---------- KPI COLOR GRADIENT ----------
+def gradient_color(value, min_val, max_val):
+    """
+    Returns smooth red → yellow → green gradient.
+    value: metric value
+    min_val: worst value
+    max_val: best value
+    """
+
+    BAD  = (237, 185, 185)
+    OK   = (237, 218, 185)
+    GOOD = (208, 237, 185)
+
+    if max_val == min_val:
+        ratio = 0.5
+    else:
+        ratio = (value - min_val) / (max_val - min_val)
+
+    ratio = max(0, min(1, ratio))
+
+    def lerp(c1, c2, t):
+        return tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
+
+    if ratio < 0.5:
+        rgb = lerp(BAD, OK, ratio * 2)
+    else:
+        rgb = lerp(OK, GOOD, (ratio - 0.5) * 2)
+
+    return f"rgb({rgb[0]}, {rgb[1]}, {rgb[2]})"
+
 def get_kpi_metrics():
     # 1. Low Stock Risk
     low_stock_data = get_data("v_product_distribution_detailed")
     low_stock = len(low_stock_data[low_stock_data['StockBuffer'] < 0])
-    
+
+
     # 2. Stock Events & MoM
     events_df = get_data("v_kpi_monthly_events")
     if not events_df.empty and len(events_df) >= 1:
@@ -109,21 +140,37 @@ def get_kpi_metrics():
 
 with tab_warehouse:
     low_stock, curr_events, mom_change, zero_usage, site, bldg = get_kpi_metrics()
+
+    low_stock_color = gradient_color(
+    value=max(0, 100 - low_stock),
+    min_val=0,
+    max_val=100)
+
+    events_color = gradient_color(
+        curr_events, 0, 500
+    )
+
+    zero_usage_color = gradient_color(
+        max(0, 200 - zero_usage), 0, 200
+    )
+
+    location_color = "#DEE7F1"
+
     # --- ROW 1: KPI CARDS ---
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        kpi_card("Low Stock", low_stock, "Critical Items")
+        kpi_card("Low Stock", low_stock, "Critical Items", low_stock_color)
 
     with col2:
         kpi_card("Events This Month", f"{int(curr_events):,}",
-                f"{mom_change:+.1f}% MoM")
+                f"{mom_change:+.1f}% MoM", events_color)
 
     with col3:
-        kpi_card("30 Days No Use", zero_usage, "Stock Audit")
+        kpi_card("30 Days No Use", zero_usage, "Stock Audit", zero_usage_color)
 
     with col4:
-        kpi_card("Top Location", site, bldg)
+        kpi_card("Top Location", site, bldg, location_color)
 
     st.divider()
 
