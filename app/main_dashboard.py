@@ -47,11 +47,6 @@ st.set_page_config(
     layout="wide"
 )
 
-st.set_page_config(layout="wide")
-
-apply_custom_style()
-
-# Apply the custom style
 apply_custom_style()
 
 # Database Connection 
