@@ -2,43 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-"""
-main_dashboard.py
-This module serves as the main entry point for the Streamlit application, LabHub, which provides 
-inventory analytics and audit trail functionalities for laboratory management. 
-The application connects to a DuckDB database to retrieve and display various metrics related to 
-inventory, including stock levels, usage trends, and compliance logs.
-
-Key Features:
-- Page configuration for a user-friendly interface.
-- Dynamic KPI metrics for inventory management, including low stock alerts and usage statistics.
-- Interactive tabs for overview, semantic search, and compliance tracking.
-- Data visualization using Plotly for usage trends and product demand.
-- Search functionality leveraging semantic search for efficient product discovery.
-- Audit trail display for regulatory compliance with export options.
-
-Modules Imported:
-- streamlit: For building the web application interface.
-- pandas: For data manipulation and analysis.
-- duckdb: For database connectivity and querying.
-- plotly.express: For creating interactive visualizations.
-- Custom modules for database connection and styling.
-
-Usage:
-To run the application, execute this script in a Python environment with the required dependencies installed.
- The application will launch in a web browser, providing access to the various features outlined above.
-"""
 import streamlit as st
-import pandas as pd
-import duckdb
-from analytics.data.connect_db import PROJECT_ROOT
-from analytics.data.connect_db import WAREHOUSE_DB
-from app.styles import apply_custom_style
-import plotly.express as px
-from vector.search import semantic_search
-from inventory_helpers import show_stock_detail
-from app.ui.kpi import kpi_card
-
 
 # Page Configuration
 st.set_page_config(
@@ -48,6 +12,16 @@ st.set_page_config(
 )
 
 apply_custom_style()
+
+import pandas as pd
+import duckdb
+from analytics.data.connect_db import PROJECT_ROOT
+from analytics.data.connect_db import WAREHOUSE_DB
+from app.styles import apply_custom_style
+import plotly.express as px
+from vector.search import semantic_search
+from inventory_helpers import show_stock_detail
+from app.ui.kpi import kpi_card
 
 # Database Connection 
 @st.cache_data
