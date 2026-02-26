@@ -11,8 +11,6 @@ st.set_page_config(
     layout="wide"
 )
 
-apply_custom_style()
-
 import pandas as pd
 import duckdb
 from analytics.data.connect_db import PROJECT_ROOT
@@ -22,6 +20,8 @@ import plotly.express as px
 from vector.search import semantic_search
 from inventory_helpers import show_stock_detail
 from app.ui.kpi import kpi_card
+
+apply_custom_style()
 
 # Database Connection 
 @st.cache_data
