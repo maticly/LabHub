@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 """
 main_dashboard.py
 This module serves as the main entry point for the Streamlit application, LabHub, which provides 
@@ -24,10 +28,6 @@ Usage:
 To run the application, execute this script in a Python environment with the required dependencies installed.
  The application will launch in a web browser, providing access to the various features outlined above.
 """
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 import streamlit as st
 import pandas as pd
 import duckdb

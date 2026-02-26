@@ -4,7 +4,10 @@ IT CONTAINS FUNCTIONS TO CONNECT TO THE SQL SERVER OLTP DATABASE AND THE DUCKDB 
 IT ALSO HAS SOME TEST FUNCTIONS TO CHECK THE CONNECTIONS AND RUN SAMPLE QUERIES.
 """
 
-import pyodbc
+try:
+    import pyodbc
+except ImportError:
+    pyodbc = None
 import pandas as pd
 import duckdb
 from pathlib import Path
